@@ -2,6 +2,9 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, updateDoc, deleteDoc, arrayUnion, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
+// ============================================================
+// ВСТАВЬ СЮДА СВОЙ firebaseConfig ИЗ ПАНЕЛИ FIREBASE
+// ============================================================
 const firebaseConfig = {
   apiKey: "AIzaSyBa_b7A-UYhNh8jFhefJWIV0m57nTkqrzk",
   authDomain: "household-space.firebaseapp.com",
@@ -42,7 +45,9 @@ function translit(str) {
 // ==========================================
 onAuthStateChanged(auth, async (user) => {
   if (user) {
-    me = { id: user.uid, name: user.displayName || "Пользователь" };
+    const displayName = user.displayName || user.email.split('@')[0] || "Пользователь";
+    me = { id: user.uid, name: displayName };
+    
     await loadFamily();
     if (!familyId) show("scr-family-choice");
     else enterHome();
@@ -68,10 +73,12 @@ $("btn-register").onclick = async () => {
   const pass = $("reg-pass").value;
   if (!name || !pass) return toast("Заполните поля");
   if (pass.length < 6) return toast("Пароль минимум 6 символов");
+  
   const btn = $("btn-register"); btn.disabled = true; btn.textContent = "Создание...";
   try {
     const cred = await createUserWithEmailAndPassword(auth, `${translit(name)}@family.local`, pass);
     await updateProfile(cred.user, { displayName: name });
+    me = { id: cred.user.uid, name: name };
   } catch (e) {
     toast(e.code === 'auth/email-already-in-use' ? "Это имя занято" : "Ошибка регистрации");
     btn.disabled = false; btn.textContent = "Создать аккаунт";
@@ -103,7 +110,8 @@ $("btn-do-create-family").onclick = async () => {
   await setDoc(doc(db, "families", newId), {
     name, ownerId: me.id, members: [me.id], memberNames: { [me.id]: me.name }, canInvite: []
   });
-  await loadFamily(); enterHome();
+  await loadFamily(); 
+  enterHome();
 };
 
 $("btn-join-family").onclick = async () => {
@@ -114,7 +122,8 @@ $("btn-join-family").onclick = async () => {
   if (!famSnap.exists()) return toast("Семья не найдена");
   
   await updateDoc(famRef, { members: arrayUnion(me.id), [`memberNames.${me.id}`]: me.name });
-  await loadFamily(); enterHome();
+  await loadFamily(); 
+  enterHome();
 };
 
 function enterHome() {
@@ -172,33 +181,65 @@ document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
 // ТАБЛИЦЫ
 // ==========================================
 async function renderTables() {
-  const box = $("tables-container"); box.innerHTML = "";
+  const box = $("tables-container"); 
+  if (!box) return;
+  box.innerHTML = '<div class="empty">Загрузка...</div>';
+  
   if (!familyId) return;
-  const q = query(collection(db, "tables"), where("familyId", "==", familyId));
-  const snap = await getDocs(q);
   
-  if (snap.empty) { box.innerHTML = '<div class="empty">Таблиц пока нет. Нажмите ＋, чтобы создать.</div>'; return; }
-  
-  snap.forEach(d => {
-    const t = d.data();
-    const el = document.createElement("div");
-    el.className = "purchase-card";
-    el.innerHTML = `<div class="pc-head"><b>${esc(t.name)}</b><small>${(t.columns||[]).length} столбц. · ${(t.rows||[]).length} строк</small></div><div class="row-gap"><button class="btn primary" data-open="${d.id}">Открыть</button><button class="btn danger" data-delete="${d.id}">Удалить</button></div>`;
-    box.appendChild(el);
-  });
-  
-  box.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openTable(b.dataset.open));
-  box.querySelectorAll('[data-delete]').forEach(b => b.onclick = async () => {
-    if(confirm('Удалить таблицу?')) {
-      await deleteDoc(doc(db, "tables", b.dataset.delete));
-      renderTables(); toast("Удалено");
+  try {
+    const q = query(collection(db, "tables"), where("familyId", "==", familyId));
+    const snap = await getDocs(q);
+    
+    // ФИЛЬТРАЦИЯ: Оставляем общие таблицы + личные таблицы текущего пользователя
+    const visibleTables = snap.docs.filter(d => {
+      const t = d.data();
+      return !t.isPrivate || t.ownerId === me.id;
+    });
+    
+    if (visibleTables.length === 0) { 
+      box.innerHTML = '<div class="empty">Таблиц пока нет. Нажмите ＋, чтобы создать.</div>'; 
+      return; 
     }
-  });
+    
+    box.innerHTML = "";
+    visibleTables.forEach(d => {
+      const t = d.data();
+      const el = document.createElement("div");
+      el.className = "purchase-card";
+      
+      const badge = t.isPrivate ? '<span class="role" style="background:#334155; padding:2px 8px; border-radius:10px; font-size:10px;">Личная</span>' : '';
+      
+      el.innerHTML = `
+        <div class="pc-head">
+          <div><b>${esc(t.name)}</b> ${badge}</div>
+          <small>${(t.columns||[]).length} столбц. · ${(t.rows||[]).length} строк</small>
+        </div>
+        <div class="row-gap">
+          <button class="btn primary" data-open="${d.id}">Открыть</button>
+          <button class="btn danger" data-delete="${d.id}">Удалить</button>
+        </div>
+      `;
+      box.appendChild(el);
+    });
+    
+    box.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openTable(b.dataset.open));
+    box.querySelectorAll('[data-delete]').forEach(b => b.onclick = async () => {
+      if(confirm('Удалить таблицу?')) {
+        await deleteDoc(doc(db, "tables", b.dataset.delete));
+        renderTables(); toast("Удалено");
+      }
+    });
+  } catch (e) {
+    console.error("Ошибка загрузки таблиц:", e);
+    box.innerHTML = '<div class="empty" style="color:red">Ошибка загрузки таблиц</div>';
+  }
 }
 
 $("btn-new-table").onclick = () => {
   $("table-modal-title").textContent = 'Новая таблица';
   $("table-name").value = '';
+  $("table-private").checked = false;
   $("modal-table").classList.remove('hidden');
 };
 $("btn-cancel-table").onclick = () => $("modal-table").classList.add('hidden');
@@ -206,14 +247,23 @@ $("btn-cancel-table").onclick = () => $("modal-table").classList.add('hidden');
 $("btn-confirm-table").onclick = async () => {
   const name = $("table-name").value.trim();
   if (!name) return toast('Введите название');
+  
+  const isPrivate = $("table-private").checked;
   const newRef = doc(collection(db, "tables"));
+  
   await setDoc(newRef, {
-    familyId, name,
-    columns: [{ id: uid(), name: 'Название', type: 'text', options: [] }],
-    rows: [{}], createdAt: Date.now()
+    familyId, 
+    name,
+    ownerId: me.id,
+    isPrivate: isPrivate,
+    columns: [{ id: uid(), name: 'Задача', type: 'text', options: [] }],
+    rows: [{}], 
+    createdAt: Date.now()
   });
+  
   $("modal-table").classList.add('hidden');
-  renderTables(); openTable(newRef.id);
+  renderTables(); 
+  openTable(newRef.id);
 };
 
 async function openTable(id) {
