@@ -1,6 +1,6 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
-import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, updateDoc, deleteDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ВСТАВЬ СВОЙ КОНФИГ:
 const firebaseConfig = {
@@ -11,6 +11,7 @@ const firebaseConfig = {
   messagingSenderId: "471755254217",
   appId: "1:471755254217:web:d1bda855b262144f992018"
 };
+
 const app = initializeApp(firebaseConfig);
 const auth = getAuth(app);
 const db = getFirestore(app);
@@ -20,7 +21,7 @@ const $ = (id) => document.getElementById(id);
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
 const esc = (s) => { const d = document.createElement("div"); d.textContent = s == null ? "" : String(s); return d.innerHTML; };
 
-function toast(msg, ms = 3000) {
+function toast(msg, ms = 4000) {
   const t = $("toast"); if (!t) return;
   t.textContent = msg; t.classList.remove("hidden");
   clearTimeout(t._t); t._t = setTimeout(() => t.classList.add("hidden"), ms);
@@ -36,9 +37,6 @@ function translit(str) {
   return str.toLowerCase().split('').map(c => ru[c] || c).join('').replace(/[^a-z0-9]/g, '');
 }
 
-// ==========================================
-// АВТОРИЗАЦИЯ
-// ==========================================
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     me = { id: user.uid, name: user.displayName || "Пользователь" };
@@ -55,45 +53,56 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-// Переключение экранов логина/регистрации
+// Навигация
 $("to-register").onclick = () => show("scr-register");
 $("to-login").onclick = () => show("scr-login");
 
-// Вход
+// ВХОД
 $("btn-login").onclick = async () => {
   const name = $("login-name").value.trim();
   const pass = $("login-pass").value;
   if (!name || !pass) return toast("Заполните поля");
+  
   try {
     await signInWithEmailAndPassword(auth, `${translit(name)}@family.local`, pass);
   } catch (e) {
-    toast("Неверное имя или пароль");
+    console.error("Ошибка входа:", e);
+    toast(`Ошибка входа: ${e.code}`);
   }
 };
 
-// Регистрация
+// РЕГИСТРАЦИЯ
 $("btn-register").onclick = async () => {
   const name = $("reg-name").value.trim();
   const pass = $("reg-pass").value;
   if (!name || !pass) return toast("Заполните поля");
   if (pass.length < 6) return toast("Пароль минимум 6 символов");
+
+  const btn = $("btn-register");
+  btn.disabled = true;
+  btn.textContent = "Создание...";
+
   try {
     const cred = await createUserWithEmailAndPassword(auth, `${translit(name)}@family.local`, pass);
     await updateProfile(cred.user, { displayName: name });
+    // Firebase сам перекинет на экран выбора семьи, так как сработает onAuthStateChanged
   } catch (e) {
-    if (e.code === 'auth/email-already-in-use') toast("Это имя уже занято");
-    else toast("Ошибка регистрации");
+    console.error("Ошибка регистрации:", e);
+    let msg = e.message;
+    if (e.code === 'auth/email-already-in-use') msg = "Это имя уже занято";
+    if (e.code === 'auth/weak-password') msg = "Пароль слишком простой";
+    if (e.code === 'auth/network-request-failed') msg = "Нет связи с Firebase. Проверьте интернет или VPN.";
+    toast(`Ошибка: ${msg}`);
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Создать аккаунт";
   }
 };
 
-// Выход
 const logout = async () => { await signOut(auth); show("scr-login"); };
 $("btn-logout").onclick = logout;
 $("btn-logout2").onclick = logout;
 
-// ==========================================
-// СЕМЬЯ
-// ==========================================
 async function loadFamily() {
   try {
     const q = query(collection(db, "families"), where("members", "array-contains", me.id));
@@ -102,21 +111,23 @@ async function loadFamily() {
     const docSnap = snap.docs[0];
     familyId = docSnap.id;
     familyData = docSnap.data();
-  } catch (e) { console.error(e); }
+  } catch (e) { console.error("Ошибка загрузки семьи:", e); }
 }
 
 $("btn-create-family").onclick = async () => {
   const newId = uid();
-  await setDoc(doc(db, "families", newId), {
-    name: "Моя семья",
-    ownerId: me.id,
-    members: [me.id],
-    memberNames: { [me.id]: me.name }
-  });
-  await loadFamily();
-  show("scr-home");
-  renderFamilyTab();
-  renderTables();
+  try {
+    await setDoc(doc(db, "families", newId), {
+      name: "Моя семья",
+      ownerId: me.id,
+      members: [me.id],
+      memberNames: { [me.id]: me.name }
+    });
+    await loadFamily();
+    show("scr-home");
+    renderFamilyTab();
+    renderTables();
+  } catch(e) { toast("Ошибка создания семьи: " + e.message); }
 };
 
 $("btn-join-family").onclick = async () => {
@@ -135,7 +146,7 @@ $("btn-join-family").onclick = async () => {
     show("scr-home");
     renderFamilyTab();
     renderTables();
-  } catch (e) { toast("Ошибка вступления"); }
+  } catch (e) { toast("Ошибка вступления: " + e.message); }
 };
 
 function renderFamilyTab() {
@@ -153,9 +164,6 @@ function renderFamilyTab() {
   });
 }
 
-// ==========================================
-// ТАБЛИЦЫ
-// ==========================================
 document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === b.dataset.tab));
   document.querySelectorAll(".tabpane").forEach(p => p.classList.toggle("active", p.id === "tab-" + b.dataset.tab));
@@ -176,7 +184,7 @@ async function renderTables() {
     el.innerHTML = `<div class="pc-head"><b>${esc(t.name)}</b></div><div class="row-gap"><button class="btn primary" data-open="${d.id}">Открыть</button></div>`;
     box.appendChild(el);
   });
-  box.querySelectorAll('[data-open]').forEach(b => b.onclick = () => toast("Открытие таблиц в следующем обновлении"));
+  box.querySelectorAll('[data-open]').forEach(b => b.onclick = () => toast("Редактор таблиц в следующем шаге"));
 }
 
 $("btn-new-table").onclick = async () => {
