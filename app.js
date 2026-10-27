@@ -17,6 +17,7 @@ const db = getFirestore(app);
 
 let me = null, familyId = null, familyData = null;
 let currentTableId = null, cellContext = null, columnDraft = [];
+let selectedRows = []; // <-- Массив для выбранных строк
 
 const $ = (id) => document.getElementById(id);
 const uid = () => Math.random().toString(36).slice(2, 10) + Date.now().toString(36).slice(-4);
@@ -42,9 +43,7 @@ function translit(str) {
 // ==========================================
 onAuthStateChanged(auth, async (user) => {
   if (user) {
-    const displayName = user.displayName || user.email.split('@')[0] || "Пользователь";
-    me = { id: user.uid, name: displayName };
-    
+    me = { id: user.uid, name: user.displayName || user.email.split('@')[0] || "Пользователь" };
     await loadFamily();
     if (!familyId) show("scr-family-choice");
     else enterHome();
@@ -62,7 +61,7 @@ $("btn-login").onclick = async () => {
   const pass = $("login-pass").value;
   if (!name || !pass) return toast("Заполните поля");
   try { await signInWithEmailAndPassword(auth, `${translit(name)}@family.local`, pass); }
-  catch (e) { toast(`Ошибка: неверное имя или пароль`); }
+  catch (e) { toast("Ошибка: неверное имя или пароль"); }
 };
 
 $("btn-register").onclick = async () => {
@@ -134,45 +133,30 @@ const isOwner = () => !!familyData && familyData.ownerId === me?.id;
 
 function renderFamilyTab() {
   if (!familyData) return;
-  
-  // Принудительно заполняем поля
   $("fam-name-label").textContent = familyData.name || "Семья";
   $("fam-id-label").textContent = familyId;
   
-  // Показываем зону переименования и участников
-  $("rename-group-zone").style.display = "block";
+  $("admin-zone").style.display = isOwner() ? "block" : "none";
+  $("rename-group-zone").style.display = isOwner() ? "block" : "none";
   $("group-name-input").value = familyData.name || "";
   
-  // Блок с кнопкой удаления семьи (если ты владелец)
-  const adminZone = $("admin-zone");
-  if (adminZone) adminZone.style.display = isOwner() ? "block" : "none";
-
-  const box = $("members-container"); 
-  if (!box) return;
-  box.innerHTML = "";
-  
-  const members = familyData.members || [];
-  
-  if (members.length === 0) {
-    box.innerHTML = '<div class="empty">Участников нет.</div>';
-  } else {
-    members.forEach(id => {
-      const name = familyData.memberNames?.[id] || "Без имени";
-      const isMe = id === me.id;
-      const role = id === familyData.ownerId ? "Владелец" : "Участник";
-      
-      const el = document.createElement("div");
-      el.className = "member";
-      el.innerHTML = `
-        <div class="info">
-          <b>${esc(name)} ${isMe ? '(Вы)' : ''}</b>
-          <div class="muted small">UID: <code>${id.slice(0,8)}...</code></div>
-        </div>
-        <div class="acts"><span class="role">${role}</span></div>
-      `;
-      box.appendChild(el);
-    });
-  }
+  const box = $("members-container"); box.innerHTML = "";
+  (familyData.members || []).forEach(id => {
+    const name = familyData.memberNames?.[id] || "Без имени";
+    const isMe = id === me.id;
+    const role = id === familyData.ownerId ? "Владелец" : "Участник";
+    
+    const el = document.createElement("div");
+    el.className = "member";
+    el.innerHTML = `
+      <div class="info">
+        <b>${esc(name)} ${isMe ? '(Вы)' : ''}</b>
+        <div class="muted small">UID: <code>${id.slice(0,8)}...</code></div>
+      </div>
+      <div class="acts"><span class="role">${role}</span></div>
+    `;
+    box.appendChild(el);
+  });
 }
 
 $("btn-rename-group").onclick = async () => {
@@ -218,6 +202,7 @@ async function renderTables() {
       const t = d.data();
       const el = document.createElement("div");
       el.className = "purchase-card";
+      
       const badge = t.isPrivate ? '<span class="role" style="background:#334155; padding:2px 8px; border-radius:10px; font-size:10px;">Личная</span>' : '';
       
       el.innerHTML = `
@@ -257,13 +242,18 @@ $("btn-cancel-table").onclick = () => $("modal-table").classList.add('hidden');
 $("btn-confirm-table").onclick = async () => {
   const name = $("table-name").value.trim();
   if (!name) return toast('Введите название');
+  
   const isPrivate = $("table-private").checked;
   const newRef = doc(collection(db, "tables"));
   
   await setDoc(newRef, {
-    familyId, name, ownerId: me.id, isPrivate: isPrivate,
+    familyId, 
+    name,
+    ownerId: me.id,
+    isPrivate: isPrivate,
     columns: [{ id: uid(), name: 'Задача', type: 'text', options: [] }],
-    rows: [{}], createdAt: Date.now()
+    rows: [{}], 
+    createdAt: Date.now()
   });
   
   $("modal-table").classList.add('hidden');
@@ -273,6 +263,7 @@ $("btn-confirm-table").onclick = async () => {
 
 async function openTable(id) {
   currentTableId = id;
+  selectedRows = []; // Сбрасываем выделение при открытии
   const snap = await getDoc(doc(db, "tables", id));
   if (!snap.exists()) return;
   show('scr-table');
@@ -291,14 +282,38 @@ function renderGrid(t) {
 
   const table = document.createElement("table"); table.className = "data-table";
   const thead = document.createElement("thead"), hr = document.createElement("tr");
-  const no = document.createElement("th"); no.textContent = "#"; no.className = "row-number"; hr.appendChild(no);
   
+  // Заголовок: Чекбокс + Номер + Названия столбцов
+  const checkAllTh = document.createElement("th"); checkAllTh.style.width = "30px";
+  const checkAll = document.createElement("input"); checkAll.type = "checkbox";
+  checkAll.onclick = (e) => {
+    const isChecked = e.target.checked;
+    selectedRows = isChecked ? t.rows.map((_, i) => i) : [];
+    renderGrid(t);
+  };
+  checkAllTh.appendChild(checkAll);
+  hr.appendChild(checkAllTh);
+
+  const no = document.createElement("th"); no.textContent = "#"; no.className = "row-number"; hr.appendChild(no);
   t.columns.forEach(c => { const th = document.createElement("th"); th.textContent = c.name; hr.appendChild(th); });
   thead.appendChild(hr); table.appendChild(thead);
   
   const tbody = document.createElement("tbody");
   (t.rows || []).forEach((r, ri) => {
     const tr = document.createElement("tr");
+    
+    // Ячейка с чекбоксом
+    const checkTd = document.createElement("td");
+    const check = document.createElement("input"); check.type = "checkbox";
+    check.checked = selectedRows.includes(ri);
+    check.onclick = (e) => {
+      if (e.target.checked) selectedRows.push(ri);
+      else selectedRows = selectedRows.filter(i => i !== ri);
+      renderGrid(t); // Перерисовываем, чтобы обновить чекбоксы
+    };
+    checkTd.appendChild(check);
+    tr.appendChild(checkTd);
+
     const num = document.createElement("td"); num.textContent = ri + 1; num.className = "row-number"; tr.appendChild(num);
     
     t.columns.forEach(c => {
@@ -322,6 +337,25 @@ $("btn-add-row").onclick = async () => {
   await updateDoc(doc(db, "tables", currentTableId), { rows: t.rows });
   renderGrid({ id: currentTableId, ...t });
   toast('Строка добавлена');
+};
+
+// УДАЛЕНИЕ ВЫБРАННЫХ СТРОК
+$("btn-delete-rows").onclick = async () => {
+  if (!currentTableId) return;
+  if (selectedRows.length === 0) return toast("Выберите строки для удаления (чекбоксы слева)");
+  
+  if (!confirm(`Удалить выбранные строки (${selectedRows.length} шт.)?`)) return;
+
+  const tSnap = await getDoc(doc(db, "tables", currentTableId));
+  const t = tSnap.data();
+  
+  // Оставляем только те строки, которых нет в selectedRows
+  t.rows = t.rows.filter((_, index) => !selectedRows.includes(index));
+  
+  await updateDoc(doc(db, "tables", currentTableId), { rows: t.rows });
+  selectedRows = [];
+  renderGrid({ id: currentTableId, ...t });
+  toast('Строки удалены');
 };
 
 $("btn-save-table").onclick = () => { toast('Все изменения уже сохранены!'); renderTables(); };
