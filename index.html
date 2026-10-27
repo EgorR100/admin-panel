@@ -24,7 +24,6 @@
         <label>Пароль</label>
         <input type="password" id="login-pass" placeholder="••••••">
         <button class="btn primary block" id="btn-login">Войти</button>
-        
         <div class="row-links" style="justify-content: center; margin-top: 15px;">
           <a id="to-register" style="color: #818cf8; cursor: pointer;">Нет аккаунта? Зарегистрироваться</a>
         </div>
@@ -61,6 +60,19 @@
       </div>
     </section>
 
+    <!-- ЭКРАН СОЗДАНИЯ СЕМЬИ (НОВОЕ ОКНО) -->
+    <section id="scr-family-new" class="screen">
+      <div class="card auth-card">
+        <h1>Новая семья</h1>
+        <label>Название семьи</label>
+        <input id="new-family-name" placeholder="Например: Ивановы">
+        <button class="btn primary block" id="btn-do-create-family">Создать</button>
+        <div class="row-links" style="justify-content: center;">
+          <a id="back-choice-1" style="color: #818cf8; cursor: pointer;">Назад</a>
+        </div>
+      </div>
+    </section>
+
     <!-- ГЛАВНЫЙ ЭКРАН -->
     <section id="scr-home" class="screen">
       <nav class="tabs">
@@ -78,14 +90,50 @@
         <div class="card">
           <div class="fam-name" id="fam-name-label">—</div>
           <div class="muted small">Код семьи: <code id="fam-id-label">—</code></div>
+          <div id="rename-group-zone" style="display:none;margin-top:12px">
+            <label>Название семьи</label>
+            <div style="display:flex;gap:6px">
+              <input id="group-name-input" placeholder="Новое название" style="flex:1">
+              <button class="btn primary" id="btn-rename-group" style="width:auto;padding:10px 14px">OK</button>
+            </div>
+          </div>
         </div>
         <h3 class="sub">Участники</h3>
         <div id="members-container" class="stack"></div>
         <button class="btn ghost block" id="btn-logout2" style="margin-top: 15px;">Выйти из аккаунта</button>
       </div>
     </section>
+
+    <!-- ЭКРАН ТАБЛИЦЫ -->
+    <section id="scr-table" class="screen">
+      <div class="pane-head">
+        <h2 id="table-heading">Таблица</h2>
+        <button class="btn ghost" id="btn-back-tables">← Назад</button>
+      </div>
+      <div class="row-gap">
+        <button class="btn secondary" id="btn-add-row">＋ Строка</button>
+        <button class="btn secondary" id="btn-manage-columns">⚙ Столбцы</button>
+        <button class="btn primary" id="btn-save-table">Сохранить</button>
+      </div>
+      <div id="table-grid-wrap" class="table-grid-wrap"></div>
+      <p class="muted small">Нажмите на ячейку, чтобы изменить её. Изменения сохраняются автоматически.</p>
+    </section>
+
+    <!-- ЭКРАН УВЕДОМЛЕНИЙ -->
+    <section id="scr-notifs" class="screen">
+      <div class="pane-head">
+        <h2>Оповещения</h2>
+        <button class="btn ghost" id="btn-close-notifs">← Назад</button>
+      </div>
+      <div id="notifs-container" class="stack"></div>
+    </section>
   </main>
 </div>
+
+<!-- МОДАЛЬНЫЕ ОКНА -->
+<div id="modal-table" class="modal hidden"><div class="modal-card"><h2 id="table-modal-title">Новая таблица</h2><label>Название таблицы</label><input id="table-name" placeholder="Например: Домашние дела"><div class="two-col mt"><button class="btn primary" id="btn-confirm-table">Создать</button><button class="btn ghost" id="btn-cancel-table">Отмена</button></div></div></div>
+<div id="modal-columns" class="modal hidden"><div class="modal-card"><h2>Столбцы</h2><div id="columns-editor" class="stack"></div><label>Название столбца</label><input id="column-name" placeholder="Например: Задача"><label>Тип данных</label><select id="column-type"><option value="text">Текст</option><option value="time">Время</option><option value="date">Дата</option><option value="select">Список</option></select><label id="options-label" class="hidden">Варианты через запятую</label><input id="column-options" class="hidden" placeholder="В процессе, Готово"><div class="two-col mt"><button class="btn secondary" id="btn-add-column">＋ Добавить</button><button class="btn primary" id="btn-close-columns">Готово</button></div></div></div>
+<div id="modal-cell" class="modal hidden"><div class="modal-card"><h2 id="cell-modal-title">Изменить ячейку</h2><div id="cell-editor"></div><div class="two-col mt"><button class="btn primary" id="btn-save-cell">Сохранить</button><button class="btn ghost" id="btn-cancel-cell">Отмена</button></div></div></div>
 
 <div id="toast" class="toast hidden"></div>
 <script type="module" src="app.js"></script>
