@@ -5,6 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
   <title>Household Space</title>
   <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
 </head>
 <body>
 <div class="app-shell">
@@ -112,6 +113,7 @@
       </div>
       <div class="row-gap">
         <button class="btn secondary" id="btn-add-row">＋ Строка</button>
+        <button class="btn danger" id="btn-delete-rows">🗑 Строки</button>
         <button class="btn secondary" id="btn-manage-columns">⚙ Столбцы</button>
         <button class="btn primary" id="btn-save-table">Сохранить</button>
       </div>
@@ -136,14 +138,11 @@
     <h2 id="table-modal-title">Новая таблица</h2>
     <label>Название таблицы</label>
     <input id="table-name" placeholder="Например: Домашние дела">
-    
-    <!-- ВЫБОР ДОСТУПА -->
     <div style="margin-top: 14px; display: flex; align-items: center; gap: 8px;">
       <input type="checkbox" id="table-private" style="width: auto; margin: 0;">
       <label for="table-private" style="margin: 0; cursor: pointer;">Личная таблица (видна только мне)</label>
     </div>
     <p class="muted small" style="margin-top: 4px;">Если не ставить галочку, таблицу увидят все члены семьи.</p>
-
     <div class="two-col mt">
       <button class="btn primary" id="btn-confirm-table">Создать</button>
       <button class="btn ghost" id="btn-cancel-table">Отмена</button>
