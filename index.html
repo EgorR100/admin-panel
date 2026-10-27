@@ -1,0 +1,175 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Household Space</title>
+  <link rel="stylesheet" href="style.css">
+  <link rel="manifest" href="manifest.json">
+  <meta name="theme-color" content="#6366f1">
+</head>
+<body>
+<div class="app-shell">
+  <header id="app-header" class="topbar">
+    <div class="brand"><span>Household Space</span></div>
+    <button id="bell-btn" class="bell-btn" title="Уведомления">🔔<span id="bell-badge" class="badge hidden">0</span></button>
+  </header>
+  
+  <main id="view">
+    <!-- ЭКРАН ВХОДА -->
+    <section id="scr-login" class="screen active">
+      <div class="card auth-card">
+        <h1>С возвращением</h1>
+        <p class="muted">Введите имя и пароль.</p>
+        <label>Имя пользователя</label><input id="login-name" placeholder="Например: Мама">
+        <label>Пароль</label><input type="password" id="login-pass" placeholder="••••••">
+        <button class="btn primary block" id="btn-login">Войти</button>
+      </div>
+    </section>
+
+    <section id="scr-family-choice" class="screen">
+      <div class="card auth-card">
+        <h1>Ваша семья</h1>
+        <p class="muted">Создайте новую или присоединитесь по ID</p>
+        <button class="btn primary block" id="btn-create-family">➕ Создать семью</button>
+        <div class="divider"><span>или</span></div>
+        <label>ID семьи (от участника)</label>
+        <input id="join-family-id" placeholder="Вставьте ID">
+        <button class="btn secondary block" id="btn-join-family">Присоединиться</button>
+      </div>
+    </section>
+
+    <section id="scr-family-new" class="screen">
+      <div class="card auth-card">
+        <h1>Новая семья</h1>
+        <label>Название семьи</label>
+        <input id="new-family-name" placeholder="Например: Ивановы">
+        <button class="btn primary block" id="btn-do-create-family">Создать</button>
+        <div class="row-links"><a id="back-choice-1">Назад</a></div>
+      </div>
+    </section>
+
+    <section id="scr-home" class="screen">
+      <nav class="tabs">
+        <button class="tab active" data-tab="tables">Таблицы</button>
+        <button class="tab" data-tab="family">Семья</button>
+      </nav>
+      
+      <div id="tab-tables" class="tabpane active">
+        <div class="pane-head"><h2>Мои таблицы</h2><button class="btn primary round" id="btn-new-table">＋</button></div>
+        <p class="muted">Создавайте семейные таблицы и редактируйте данные вместе.</p>
+        <div id="tables-container" class="stack"></div>
+      </div>
+
+      <div id="tab-family" class="tabpane">
+        <div class="pane-head"><h2>Семья</h2></div>
+        <div class="card">
+          <div class="fam-name" id="fam-name-label">—</div>
+          <div class="muted small">ID: <code id="fam-id-label">—</code></div>
+          <div class="row-gap">
+            <button class="btn secondary" id="btn-share-family" style="display:none">📣 Поделиться ID</button>
+            <button class="btn ghost" id="btn-enable-notif">🔔 Уведомления</button>
+          </div>
+          <div id="rename-group-zone" style="display:none;margin-top:12px">
+            <label>Название семьи</label>
+            <div style="display:flex;gap:6px">
+              <input id="group-name-input" placeholder="Новое название" style="flex:1">
+              <button class="btn primary" id="btn-rename-group" style="width:auto;padding:10px 14px">OK</button>
+            </div>
+          </div>
+        </div>
+        
+        <h3 class="sub">Мой профиль</h3>
+        <div class="card">
+          <label>Имя</label><input id="prof-name" placeholder="Ваше имя">
+          <label>Новый пароль (оставьте пустым, чтобы не менять)</label><input type="password" id="prof-pass" placeholder="••••••">
+          <button class="btn primary block" id="btn-save-profile">Сохранить профиль</button>
+        </div>
+        
+        <h3 class="sub">Участники</h3>
+        <div id="members-container" class="stack"></div>
+        
+        <div id="admin-zone" style="margin-top:14px;display:none">
+          <h3 class="sub">Админ-панель</h3>
+          <button class="btn danger block" id="btn-delete-family">🗑 Удалить всю семью</button>
+        </div>
+        
+        <button class="btn ghost block mt" id="btn-leave" style="display:none">Покинуть семью</button>
+        <button class="btn ghost block" id="btn-logout">Выйти из аккаунта</button>
+      </div>
+    </section>
+
+    <section id="scr-table" class="screen">
+      <div class="pane-head">
+        <h2 id="table-heading">Таблица</h2>
+        <button class="btn ghost" id="btn-back-tables">← Назад</button>
+      </div>
+      <div class="row-gap">
+        <button class="btn secondary" id="btn-add-row">＋ Строка</button>
+        <button class="btn secondary" id="btn-manage-columns">⚙ Столбцы</button>
+        <button class="btn primary" id="btn-save-table">Сохранить</button>
+      </div>
+      <div id="table-grid-wrap" class="table-grid-wrap"></div>
+      <p class="muted small">Нажмите на ячейку, чтобы изменить её. Изменения сохраняются кнопкой «Сохранить».</p>
+    </section>
+
+    <section id="scr-notifs" class="screen">
+      <div class="pane-head">
+        <h2>Оповещения</h2>
+        <button class="btn ghost" id="btn-close-notifs">← Назад</button>
+      </div>
+      <div id="notifs-container" class="stack"></div>
+    </section>
+  </main>
+  
+  <!-- Модалки -->
+  <div id="modal-table" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="table-modal-title">Новая таблица</h2>
+      <label>Название таблицы</label>
+      <input id="table-name" placeholder="Например: Домашние дела">
+      <div class="two-col mt">
+        <button class="btn primary" id="btn-confirm-table">Создать</button>
+        <button class="btn ghost" id="btn-cancel-table">Отмена</button>
+      </div>
+    </div>
+  </div>
+  
+  <div id="modal-columns" class="modal hidden">
+    <div class="modal-card">
+      <h2>Столбцы таблицы</h2>
+      <div id="columns-editor" class="stack"></div>
+      <label>Название столбца</label>
+      <input id="column-name" placeholder="Например: Задача">
+      <label>Тип данных</label>
+      <select id="column-type">
+        <option value="text">Текст</option>
+        <option value="time">Время (ЧЧ:ММ)</option>
+        <option value="date">Дата (ДД.ММ.ГГГГ)</option>
+        <option value="select">Выпадающий список</option>
+      </select>
+      <label id="options-label" class="hidden">Варианты через запятую</label>
+      <input id="column-options" class="hidden" placeholder="Например: В процессе, Готово">
+      <div class="two-col mt">
+        <button class="btn secondary" id="btn-add-column">＋ Добавить столбец</button>
+        <button class="btn primary" id="btn-close-columns">Готово</button>
+      </div>
+    </div>
+  </div>
+
+  <div id="modal-cell" class="modal hidden">
+    <div class="modal-card">
+      <h2 id="cell-modal-title">Изменить ячейку</h2>
+      <div id="cell-editor"></div>
+      <div class="two-col mt">
+        <button class="btn primary" id="btn-save-cell">Сохранить</button>
+        <button class="btn ghost" id="btn-cancel-cell">Отмена</button>
+      </div>
+    </div>
+  </div>
+</div>
+<div id="toast" class="toast hidden"></div>
+
+<script type="module" src="app.js"></script>
+</body>
+</html>
