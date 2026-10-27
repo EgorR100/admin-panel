@@ -2,7 +2,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, updateDoc, arrayUnion } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// ВСТАВЬ СВОЙ КОНФИГ:
 const firebaseConfig = {
   apiKey: "AIzaSyBa_b7A-UYhNh8jFhefJWIV0m57nTkqrzk",
   authDomain: "household-space.firebaseapp.com",
@@ -26,17 +25,18 @@ function toast(msg, ms = 4000) {
   t.textContent = msg; t.classList.remove("hidden");
   clearTimeout(t._t); t._t = setTimeout(() => t.classList.add("hidden"), ms);
 }
+
 function show(id) {
   document.querySelectorAll(".screen").forEach(s => s.classList.remove("active"));
   $(id)?.classList.add("active");
 }
 
-// Перевод имени в email (Мама -> mama@family.local)
 function translit(str) {
   const ru = { 'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya' };
   return str.toLowerCase().split('').map(c => ru[c] || c).join('').replace(/[^a-z0-9]/g, '');
 }
 
+// АВТОРИЗАЦИЯ
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     me = { id: user.uid, name: user.displayName || "Пользователь" };
@@ -53,25 +53,20 @@ onAuthStateChanged(auth, async (user) => {
   }
 });
 
-// Навигация
 $("to-register").onclick = () => show("scr-register");
 $("to-login").onclick = () => show("scr-login");
 
-// ВХОД
 $("btn-login").onclick = async () => {
   const name = $("login-name").value.trim();
   const pass = $("login-pass").value;
   if (!name || !pass) return toast("Заполните поля");
-  
   try {
     await signInWithEmailAndPassword(auth, `${translit(name)}@family.local`, pass);
   } catch (e) {
-    console.error("Ошибка входа:", e);
-    toast(`Ошибка входа: ${e.code}`);
+    toast(`Ошибка: ${e.code}`);
   }
 };
 
-// РЕГИСТРАЦИЯ
 $("btn-register").onclick = async () => {
   const name = $("reg-name").value.trim();
   const pass = $("reg-pass").value;
@@ -85,13 +80,9 @@ $("btn-register").onclick = async () => {
   try {
     const cred = await createUserWithEmailAndPassword(auth, `${translit(name)}@family.local`, pass);
     await updateProfile(cred.user, { displayName: name });
-    // Firebase сам перекинет на экран выбора семьи, так как сработает onAuthStateChanged
   } catch (e) {
-    console.error("Ошибка регистрации:", e);
     let msg = e.message;
     if (e.code === 'auth/email-already-in-use') msg = "Это имя уже занято";
-    if (e.code === 'auth/weak-password') msg = "Пароль слишком простой";
-    if (e.code === 'auth/network-request-failed') msg = "Нет связи с Firebase. Проверьте интернет или VPN.";
     toast(`Ошибка: ${msg}`);
   } finally {
     btn.disabled = false;
@@ -103,50 +94,45 @@ const logout = async () => { await signOut(auth); show("scr-login"); };
 $("btn-logout").onclick = logout;
 $("btn-logout2").onclick = logout;
 
+// СЕМЬЯ
 async function loadFamily() {
-  try {
-    const q = query(collection(db, "families"), where("members", "array-contains", me.id));
-    const snap = await getDocs(q);
-    if (snap.empty) { familyId = null; familyData = null; return; }
-    const docSnap = snap.docs[0];
-    familyId = docSnap.id;
-    familyData = docSnap.data();
-  } catch (e) { console.error("Ошибка загрузки семьи:", e); }
+  const q = query(collection(db, "families"), where("members", "array-contains", me.id));
+  const snap = await getDocs(q);
+  if (snap.empty) { familyId = null; familyData = null; return; }
+  const docSnap = snap.docs[0];
+  familyId = docSnap.id;
+  familyData = docSnap.data();
 }
 
 $("btn-create-family").onclick = async () => {
   const newId = uid();
-  try {
-    await setDoc(doc(db, "families", newId), {
-      name: "Моя семья",
-      ownerId: me.id,
-      members: [me.id],
-      memberNames: { [me.id]: me.name }
-    });
-    await loadFamily();
-    show("scr-home");
-    renderFamilyTab();
-    renderTables();
-  } catch(e) { toast("Ошибка создания семьи: " + e.message); }
+  await setDoc(doc(db, "families", newId), {
+    name: "Моя семья",
+    ownerId: me.id,
+    members: [me.id],
+    memberNames: { [me.id]: me.name }
+  });
+  await loadFamily();
+  show("scr-home");
+  renderFamilyTab();
+  renderTables();
 };
 
 $("btn-join-family").onclick = async () => {
   const code = $("join-family-id").value.trim();
   if (!code) return toast("Введите код");
-  try {
-    const famRef = doc(db, "families", code);
-    const famSnap = await getDoc(famRef);
-    if (!famSnap.exists()) return toast("Семья не найдена");
-    
-    await updateDoc(famRef, {
-      members: arrayUnion(me.id),
-      [`memberNames.${me.id}`]: me.name
-    });
-    await loadFamily();
-    show("scr-home");
-    renderFamilyTab();
-    renderTables();
-  } catch (e) { toast("Ошибка вступления: " + e.message); }
+  const famRef = doc(db, "families", code);
+  const famSnap = await getDoc(famRef);
+  if (!famSnap.exists()) return toast("Семья не найдена");
+  
+  await updateDoc(famRef, {
+    members: arrayUnion(me.id),
+    [`memberNames.${me.id}`]: me.name
+  });
+  await loadFamily();
+  show("scr-home");
+  renderFamilyTab();
+  renderTables();
 };
 
 function renderFamilyTab() {
@@ -164,6 +150,7 @@ function renderFamilyTab() {
   });
 }
 
+// ТАБЛИЦЫ
 document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === b.dataset.tab));
   document.querySelectorAll(".tabpane").forEach(p => p.classList.toggle("active", p.id === "tab-" + b.dataset.tab));
