@@ -59,9 +59,8 @@ $("btn-login").onclick = async () => {
   const name = $("login-name").value.trim();
   const pass = $("login-pass").value;
   if (!name || !pass) return toast("Заполните поля");
-  try {
-    await signInWithEmailAndPassword(auth, `${translit(name)}@family.local`, pass);
-  } catch (e) { toast(`Ошибка входа: неверное имя или пароль`); }
+  try { await signInWithEmailAndPassword(auth, `${translit(name)}@family.local`, pass); }
+  catch (e) { toast(`Ошибка: неверное имя или пароль`); }
 };
 
 $("btn-register").onclick = async () => {
@@ -69,13 +68,12 @@ $("btn-register").onclick = async () => {
   const pass = $("reg-pass").value;
   if (!name || !pass) return toast("Заполните поля");
   if (pass.length < 6) return toast("Пароль минимум 6 символов");
-
   const btn = $("btn-register"); btn.disabled = true; btn.textContent = "Создание...";
   try {
     const cred = await createUserWithEmailAndPassword(auth, `${translit(name)}@family.local`, pass);
     await updateProfile(cred.user, { displayName: name });
   } catch (e) {
-    toast(e.code === 'auth/email-already-in-use' ? "Это имя уже занято" : "Ошибка регистрации");
+    toast(e.code === 'auth/email-already-in-use' ? "Это имя занято" : "Ошибка регистрации");
     btn.disabled = false; btn.textContent = "Создать аккаунт";
   }
 };
@@ -96,10 +94,14 @@ async function loadFamily() {
   familyData = docSnap.data();
 }
 
-$("btn-create-family").onclick = async () => {
+$("btn-create-family").onclick = () => show("scr-family-new");
+$("back-choice-1").onclick = () => show("scr-family-choice");
+
+$("btn-do-create-family").onclick = async () => {
+  const name = $("new-family-name").value.trim() || "Моя семья";
   const newId = uid();
   await setDoc(doc(db, "families", newId), {
-    name: "Моя семья", ownerId: me.id, members: [me.id], memberNames: { [me.id]: me.name }
+    name, ownerId: me.id, members: [me.id], memberNames: { [me.id]: me.name }, canInvite: []
   });
   await loadFamily(); enterHome();
 };
@@ -122,20 +124,44 @@ function enterHome() {
   updateBell();
 }
 
+const isOwner = () => !!familyData && familyData.ownerId === me?.id;
+
 function renderFamilyTab() {
   if (!familyData) return;
   $("fam-name-label").textContent = familyData.name || "Семья";
   $("fam-id-label").textContent = familyId;
   
+  $("admin-zone").style.display = isOwner() ? "block" : "none";
+  $("rename-group-zone").style.display = isOwner() ? "block" : "none";
+  $("group-name-input").value = familyData.name || "";
+  
   const box = $("members-container"); box.innerHTML = "";
   (familyData.members || []).forEach(id => {
-    const name = familyData.memberNames?.[id] || "Участник";
+    const name = familyData.memberNames?.[id] || "Без имени";
+    const isMe = id === me.id;
+    const role = id === familyData.ownerId ? "Владелец" : "Участник";
+    
     const el = document.createElement("div");
     el.className = "member";
-    el.innerHTML = `<div class="info"><b>${esc(name)}</b></div><div class="acts"><span class="role">${id === familyData.ownerId ? 'Владелец' : 'Участник'}</span></div>`;
+    el.innerHTML = `
+      <div class="info">
+        <b>${esc(name)} ${isMe ? '(Вы)' : ''}</b>
+        <div class="muted small">UID: <code>${id.slice(0,8)}...</code></div>
+      </div>
+      <div class="acts"><span class="role">${role}</span></div>
+    `;
     box.appendChild(el);
   });
 }
+
+$("btn-rename-group").onclick = async () => {
+  if (!isOwner()) return toast("Только админ может менять название");
+  const n = $("group-name-input").value.trim();
+  if (!n) return toast("Введите название");
+  await updateDoc(doc(db, "families", familyId), { name: n });
+  familyData.name = n;
+  renderFamilyTab(); toast("Название обновлено");
+};
 
 document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
   document.querySelectorAll(".tab").forEach(t => t.classList.toggle("active", t.dataset.tab === b.dataset.tab));
@@ -143,7 +169,7 @@ document.querySelectorAll(".tab").forEach(b => b.onclick = () => {
 });
 
 // ==========================================
-// ТАБЛИЦЫ (СПИСОК)
+// ТАБЛИЦЫ
 // ==========================================
 async function renderTables() {
   const box = $("tables-container"); box.innerHTML = "";
@@ -243,7 +269,7 @@ $("btn-add-row").onclick = async () => {
   toast('Строка добавлена');
 };
 
-$("btn-save-table").onclick = () => { toast('Все изменения уже сохранены в облаке!'); renderTables(); };
+$("btn-save-table").onclick = () => { toast('Все изменения уже сохранены!'); renderTables(); };
 
 function editCell(tableId, rowIndex, colId) {
   getDoc(doc(db, "tables", tableId)).then(snap => {
@@ -296,7 +322,6 @@ $("btn-save-cell").onclick = async () => {
   t.rows[rowIndex][colId] = value;
   await updateDoc(doc(db, "tables", tableId), { rows: t.rows });
   
-  // Добавляем уведомление
   await addDoc(collection(db, "notifications"), {
     familyId, tableId, tableName: t.name,
     authorId: me.id, authorName: me.name,
@@ -364,7 +389,7 @@ $("btn-close-columns").onclick = async () => {
 };
 
 // ==========================================
-// КОЛОКОЛЬЧИК
+// УВЕДОМЛЕНИЯ
 // ==========================================
 async function updateBell() {
   if(!familyId) return;
