@@ -9,12 +9,12 @@ import {
 
 // ВСТАВЬ СЮДА СВОЙ firebaseConfig ИЗ FIREBASE:
 const firebaseConfig = {
-  apiKey: "ТВОЙ_API_KEY",
+  apiKey: "AIzaSyBa_b7A-UYhNh8jFhefJWIV0m57nTkqrzk",
   authDomain: "household-space.firebaseapp.com",
   projectId: "household-space",
-  storageBucket: "household-space.appspot.com",
-  messagingSenderId: "123456789",
-  appId: "1:123456789:web:abcdef"
+  storageBucket: "household-space.firebasestorage.app",
+  messagingSenderId: "471755254217",
+  appId: "1:471755254217:web:d1bda855b262144f992018"
 };
 
 const app = initializeApp(firebaseConfig);
