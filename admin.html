@@ -13,43 +13,56 @@
     button:disabled { opacity: 0.5; }
     .toast { background: #ef4444; color: #fff; padding: 10px; border-radius: 8px; margin-bottom: 10px; display: none; text-align: center; }
     .success { background: #22c55e !important; }
+    .user { display: flex; justify-content: space-between; align-items: center; padding: 10px 0; border-bottom: 1px solid #334155; }
+    .user:last-child { border-bottom: 0; }
+    .user .name { font-weight: bold; }
+    .user .role { font-size: 0.8rem; color: #94a3b8; }
+    .del-btn { background: #ef4444; color: #fff; border: 0; border-radius: 6px; padding: 5px 10px; font-size: 0.8rem; cursor: pointer; width: auto; }
+    h3 { margin-top: 0; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>🔧 Админка (Firebase)</h1>
-    
-    <!-- Уведомление -->
+    <h1>🔧 Админка</h1>
     <div id="toast" class="toast"></div>
     
+    <!-- Форма создания -->
     <div class="card">
+      <h3>Создать аккаунт</h3>
       <label>Имя (логин)</label>
       <input id="name" placeholder="Например: Мама">
       <label>Пароль (мин. 6)</label>
       <input id="password" type="text" placeholder="••••••">
       <button id="btn">Создать аккаунт</button>
     </div>
+
+    <!-- Список пользователей -->
+    <div class="card">
+      <h3>Пользователи в системе</h3>
+      <div id="users-list"><div style="color:#94a3b8">Загрузка...</div></div>
+    </div>
   </div>
 
   <script type="module">
     // ============================================================
-    // ВСТАВЬ СЮДА СВОЙ firebaseConfig ИЗ ПАНЕЛИ FIREBASE
-    // (Project Settings → General → Your apps → SDK setup and configuration)
+    // ВСТАВЬ СВОЙ firebaseConfig:
     // ============================================================
     const firebaseConfig = {
-  apiKey: "AIzaSyBa_b7A-UYhNh8jFhefJWIV0m57nTkqrzk",
-  authDomain: "household-space.firebaseapp.com",
-  projectId: "household-space",
-  storageBucket: "household-space.firebasestorage.app",
-  messagingSenderId: "471755254217",
-  appId: "1:471755254217:web:d1bda855b262144f992018"
-  };
+      apiKey: "ТВОЙ_API_KEY",
+      authDomain: "household-space.firebaseapp.com",
+      projectId: "household-space",
+      storageBucket: "household-space.appspot.com",
+      messagingSenderId: "123456789",
+      appId: "1:123456789:web:abcdef"
+    };
 
     import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
-    import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getAuth, createUserWithEmailAndPassword, updateProfile, signOut } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+    import { getFirestore, doc, setDoc, deleteDoc, collection, getDocs, query, orderBy } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
     const app = initializeApp(firebaseConfig);
     const auth = getAuth(app);
+    const db = getFirestore(app);
     
     const $ = (id) => document.getElementById(id);
     const toastEl = $("toast");
@@ -61,6 +74,56 @@
       setTimeout(() => { toastEl.style.display = "none"; }, 4000);
     }
 
+    function translit(str) {
+      const ru = { 'а':'a','б':'b','в':'v','г':'g','д':'d','е':'e','ё':'e','ж':'zh','з':'z','и':'i','й':'y','к':'k','л':'l','м':'m','н':'n','о':'o','п':'p','р':'r','с':'s','т':'t','у':'u','ф':'f','х':'h','ц':'ts','ч':'ch','ш':'sh','щ':'sch','ъ':'','ы':'y','ь':'','э':'e','ю':'yu','я':'ya' };
+      return str.toLowerCase().split('').map(c => ru[c] || c).join('').replace(/[^a-z0-9]/g, '');
+    }
+
+    // Загрузка списка пользователей
+    async function loadUsers() {
+      const box = $("users-list");
+      try {
+        // Мы читаем коллекцию "users" из Firestore
+        const q = query(collection(db, "users"));
+        const snap = await getDocs(q);
+        
+        if (snap.empty) {
+          box.innerHTML = '<div style="color:#94a3b8">Пока никого нет.</div>';
+          return;
+        }
+
+        box.innerHTML = "";
+        snap.forEach(d => {
+          const u = d.data();
+          const el = document.createElement("div");
+          el.className = "user";
+          el.innerHTML = `
+            <div>
+              <div class="name">${u.displayName || u.email}</div>
+              <div class="role">${u.email}</div>
+            </div>
+            <button class="del-btn" data-id="${d.id}">Удалить</button>
+          `;
+          box.appendChild(el);
+        });
+
+        // Привязываем кнопки удаления
+        box.querySelectorAll('.del-btn').forEach(b => b.onclick = async () => {
+          if (confirm('Удалить пользователя из списка?')) {
+            // Удаляем из базы (сам аккаунт Firebase Auth удалить из браузера нельзя без сервера, но из списка он пропадет)
+            await deleteDoc(doc(db, "users", b.dataset.id));
+            showToast("Удален из списка", true);
+            loadUsers();
+          }
+        });
+
+      } catch (e) {
+        console.error(e);
+        box.innerHTML = '<div style="color:#ef4444">Ошибка загрузки списка.</div>';
+      }
+    }
+
+    // Создание аккаунта
     $("btn").onclick = async () => {
       const name = $("name").value.trim();
       const password = $("password").value;
@@ -72,30 +135,41 @@
       $("btn").textContent = "Создание...";
 
       try {
-        // Firebase требует email, поэтому мы делаем его из имени
-        const safeName = name.toLowerCase().replace(/[^a-zа-я0-9]/gi, '');
-        const email = `${safeName}@family.local`;
+        const email = `${translit(name)}@family.local`;
         
-        // Создаем пользователя
+        // 1. Создаем аккаунт в Firebase Auth
         const userCredential = await createUserWithEmailAndPassword(auth, email, password);
+        const uid = userCredential.user.uid;
         
-        // Сохраняем оригинальное имя (с русскими буквами и пробелами) в профиль
-        const { updateProfile } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+        // 2. Обновляем профиль (имя)
         await updateProfile(userCredential.user, { displayName: name });
+
+        // 3. Сохраняем в базу данных Firestore (для списка в админке)
+        await setDoc(doc(db, "users", uid), {
+          email: email,
+          displayName: name,
+          createdAt: Date.now()
+        });
+
+        // Выходим из аккаунта, чтобы создавать следующего
+        await signOut(auth);
 
         showToast("✅ Аккаунт создан", true);
         $("name").value = "";
         $("password").value = "";
+        loadUsers(); // Обновляем список
       } catch (e) {
         let errMsg = e.message;
         if (e.code === 'auth/email-already-in-use') errMsg = "Это имя уже занято";
-        if (e.code === 'auth/invalid-email') errMsg = "Некорректное имя (используйте буквы и цифры)";
         showToast("❌ " + errMsg);
       } finally {
         $("btn").disabled = false;
         $("btn").textContent = "Создать аккаунт";
       }
     };
+
+    // Загружаем список при открытии
+    loadUsers();
   </script>
 </body>
 </html>
