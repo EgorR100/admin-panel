@@ -4,17 +4,17 @@ import {
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { 
   getFirestore, doc, setDoc, getDoc, collection, query, where, 
-  updateDoc, deleteDoc, addDoc, arrayUnion, getDocs
+  updateDoc, deleteDoc, arrayUnion, getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// ВСТАВЬ СЮДА СВОЙ firebaseConfig ИЗ FIREBASE:
+// ВСТАВЬ СЮДА СВОЙ firebaseConfig:
 const firebaseConfig = {
-  apiKey: "AIzaSyBa_b7A-UYhNh8jFhefJWIV0m57nTkqrzk",
+  apiKey: "ТВОЙ_API_KEY",
   authDomain: "household-space.firebaseapp.com",
   projectId: "household-space",
-  storageBucket: "household-space.firebasestorage.app",
-  messagingSenderId: "471755254217",
-  appId: "1:471755254217:web:d1bda855b262144f992018"
+  storageBucket: "household-space.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -71,22 +71,26 @@ $("btn-logout").onclick = async () => {
 };
 
 async function loadFamily() {
-  const q = query(collection(db, "families"), where("members", "array-contains", me.id));
-  const snap = await getDocs(q);
-  if (snap.empty) { family = null; familyId = null; return; }
-  const docSnap = snap.docs[0];
-  familyId = docSnap.id;
-  family = { id: familyId, ...docSnap.data() };
+  try {
+    const q = query(collection(db, "families"), where("members", "array-contains", me.id));
+    const snap = await getDocs(q);
+    if (snap.empty) { family = null; familyId = null; return; }
+    const docSnap = snap.docs[0];
+    familyId = docSnap.id;
+    family = { id: familyId, ...docSnap.data() };
+  } catch (e) { console.error("Ошибка загрузки семьи:", e); }
 }
 
 $("btn-do-create-family").onclick = async () => {
   const name = $("new-family-name").value.trim() || "Моя семья";
   const newId = uid();
-  await setDoc(doc(db, "families", newId), {
-    name, ownerId: me.id, members: [me.id], canInvite: [], memberNames: { [me.id]: me.name }
-  });
-  await loadFamily();
-  enterHome();
+  try {
+    await setDoc(doc(db, "families", newId), {
+      name, ownerId: me.id, members: [me.id], canInvite: [], memberNames: { [me.id]: me.name }
+    });
+    await loadFamily();
+    enterHome();
+  } catch (e) { toast("Ошибка: " + e.message); }
 };
 
 $("btn-join-family").onclick = async () => {
@@ -102,7 +106,7 @@ $("btn-join-family").onclick = async () => {
     });
     await loadFamily();
     enterHome();
-  } catch(e) { toast("Ошибка при вступлении"); }
+  } catch(e) { toast("Ошибка: " + e.message); }
 };
 
 function enterHome() {
@@ -139,25 +143,27 @@ function renderFamilyTab() {
 
 async function renderTables() {
   const box = $("tables-container"); box.innerHTML = "";
-  const q = query(collection(db, "tables"), where("familyId", "==", familyId));
-  const snap = await getDocs(q);
-  if (snap.empty) { box.innerHTML = '<div class="empty">Таблиц пока нет. Нажмите ＋, чтобы создать.</div>'; return; }
-  
-  snap.forEach(d => {
-    const t = d.data();
-    const el = document.createElement("div");
-    el.className = "purchase-card";
-    el.innerHTML = `<div class="pc-head"><b>${esc(t.name)}</b></div><div class="row-gap"><button class="btn primary" data-open="${d.id}">Открыть</button><button class="btn danger" data-delete="${d.id}">Удалить</button></div>`;
-    box.appendChild(el);
-  });
-  
-  box.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openTable(b.dataset.open));
-  box.querySelectorAll('[data-delete]').forEach(b => b.onclick = async () => {
-    if(confirm('Удалить таблицу?')) {
-      await deleteDoc(doc(db, "tables", b.dataset.delete));
-      renderTables();
-    }
-  });
+  try {
+    const q = query(collection(db, "tables"), where("familyId", "==", familyId));
+    const snap = await getDocs(q);
+    if (snap.empty) { box.innerHTML = '<div class="empty">Таблиц пока нет. Нажмите ＋, чтобы создать.</div>'; return; }
+    
+    snap.forEach(d => {
+      const t = d.data();
+      const el = document.createElement("div");
+      el.className = "purchase-card";
+      el.innerHTML = `<div class="pc-head"><b>${esc(t.name)}</b></div><div class="row-gap"><button class="btn primary" data-open="${d.id}">Открыть</button><button class="btn danger" data-delete="${d.id}">Удалить</button></div>`;
+      box.appendChild(el);
+    });
+    
+    box.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openTable(b.dataset.open));
+    box.querySelectorAll('[data-delete]').forEach(b => b.onclick = async () => {
+      if(confirm('Удалить таблицу?')) {
+        await deleteDoc(doc(db, "tables", b.dataset.delete));
+        renderTables();
+      }
+    });
+  } catch (e) { console.error(e); }
 }
 
 $("btn-new-table").onclick = () => {
@@ -215,7 +221,6 @@ function renderGrid(t) {
 
 $("btn-back-tables").onclick = () => { show("scr-home"); renderTables(); };
 
-// Добавление строки
 $("btn-add-row").onclick = async () => {
   if (!currentTableId) return;
   const tSnap = await getDoc(doc(db, "tables", currentTableId));
@@ -226,13 +231,11 @@ $("btn-add-row").onclick = async () => {
   toast('Строка добавлена');
 };
 
-// Сохранение таблицы
 $("btn-save-table").onclick = async () => {
-  toast('Все изменения уже сохранены в облаке!');
+  toast('Все изменения сохранены!');
   renderTables();
 };
 
-// Редактирование ячейки
 function editCell(tableId, rowIndex, colId) {
   getDoc(doc(db, "tables", tableId)).then(snap => {
     if (!snap.exists()) return;
@@ -278,3 +281,9 @@ async function updateBell() {
   $("bell-badge").textContent = count;
   $("bell-badge").classList.toggle("hidden", count === 0);
 }
+
+$("bell-btn").onclick = () => {
+  if(!familyId) return;
+  updateBell();
+  toast("Уведомления обновлены");
+};
