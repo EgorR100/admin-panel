@@ -2,7 +2,7 @@
 <html lang="ru">
 <head>
   <meta charset="UTF-8">
-  <title>Админка (Прямой запрос)</title>
+  <title>Админка Firebase</title>
   <style>
     body { font-family: system-ui, sans-serif; background: #0f172a; color: #e2e8f0; padding: 24px; }
     .wrap { max-width: 500px; margin: 0 auto; }
@@ -10,112 +10,92 @@
     label { display: block; font-size: .82rem; color: #94a3b8; margin: 8px 0 4px; }
     input { width: 100%; padding: 10px; border-radius: 8px; border: 1px solid #334155; background: #273449; color: #fff; margin-bottom: 10px; box-sizing: border-box; }
     button { background: #6366f1; color: #fff; border: 0; padding: 10px; border-radius: 8px; width: 100%; font-weight: bold; cursor: pointer; }
-    .user { display: flex; justify-content: space-between; padding: 10px 0; border-bottom: 1px solid #334155; }
-    .toast { background: #ef4444; color: #fff; padding: 10px; border-radius: 8px; margin-bottom: 10px; display: none; }
+    button:disabled { opacity: 0.5; }
+    .toast { background: #ef4444; color: #fff; padding: 10px; border-radius: 8px; margin-bottom: 10px; display: none; text-align: center; }
+    .success { background: #22c55e !important; }
   </style>
 </head>
 <body>
   <div class="wrap">
-    <h1>🔧 Админка</h1>
+    <h1>🔧 Админка (Firebase)</h1>
+    
+    <!-- Уведомление -->
     <div id="toast" class="toast"></div>
     
     <div class="card">
       <label>Имя (логин)</label>
       <input id="name" placeholder="Например: Мама">
-      <label>Пароль</label>
+      <label>Пароль (мин. 6)</label>
       <input id="password" type="text" placeholder="••••••">
       <button id="btn">Создать аккаунт</button>
     </div>
-
-    <div class="card">
-      <h3>Пользователи</h3>
-      <div id="users">Загрузка...</div>
-    </div>
   </div>
 
-  <script>
-    const $ = (id) => document.getElementById(id);
+  <script type="module">
+    // ============================================================
+    // ВСТАВЬ СЮДА СВОЙ firebaseConfig ИЗ ПАНЕЛИ FIREBASE
+    // (Project Settings → General → Your apps → SDK setup and configuration)
+    // ============================================================
+    const firebaseConfig = {
+  apiKey: "AIzaSyBa_b7A-UYhNh8jFhefJWIV0m57nTkqrzk",
+  authDomain: "household-space.firebaseapp.com",
+  projectId: "household-space",
+  storageBucket: "household-space.firebasestorage.app",
+  messagingSenderId: "471755254217",
+  appId: "1:471755254217:web:d1bda855b262144f992018"
+  };
+
+    import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+    import { getAuth, createUserWithEmailAndPassword } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+
+    const app = initializeApp(firebaseConfig);
+    const auth = getAuth(app);
     
-    // ВСТАВЬ СВОИ ДАННЫЕ:
-    const SUPABASE_URL = "https://hubhgcxftirwqaxqjtrc.supabase.co";
-    const SUPABASE_SERVICE_KEY = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6Imh1YmhnY3hmdGxyd3FheHFybHJjIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc5MzA0NDI4MSwiZXhwIjoyMTA4NjIwMjgxfQ.K7gLLqCbcRHhqJDI6k9te3qTpUYeTcq5iQXjOQeIOcM";
-
-    function showToast(msg) {
-      const t = $("toast");
-      t.textContent = msg;
-      t.style.display = "block";
-      setTimeout(() => t.style.display = "none", 5000);
-    }
-
-    async function supabaseRequest(endpoint, method, body = null) {
-      const url = SUPABASE_URL + endpoint;
-      
-      const headers = {
-        "apikey": SUPABASE_SERVICE_KEY,
-        "Authorization": `Bearer ${SUPABASE_SERVICE_KEY}`,
-        "Content-Type": "application/json"
-      };
-
-      const options = { method, headers };
-      if (body) options.body = JSON.stringify(body);
-
-      const res = await fetch(url, options);
-      
-      if (!res.ok) {
-        const text = await res.text();
-        let errMsg = text;
-        try { const json = JSON.parse(text); errMsg = json.message || json.error || text; } catch {}
-        throw new Error(errMsg);
-      }
-      return await res.json();
-    }
-
-    async function loadUsers() {
-      try {
-        const data = await supabaseRequest("/auth/v1/admin/users", "GET");
-        const users = data.users || data; 
-        
-        if (!Array.isArray(users)) throw new Error("Неверный формат ответа от Supabase");
-        
-        $("users").innerHTML = users.map(u => 
-          `<div class="user"><span>${u.user_metadata?.display_name || u.email}</span><span style="color:#94a3b8;font-size:12px">${u.email}</span></div>`
-        ).join("");
-      } catch (e) {
-        $("users").innerHTML = `<span style="color:#ef4444">Ошибка загрузки: ${e.message}</span>`;
-      }
+    const $ = (id) => document.getElementById(id);
+    const toastEl = $("toast");
+    
+    function showToast(msg, isSuccess = false) {
+      toastEl.textContent = msg;
+      toastEl.style.display = "block";
+      toastEl.className = isSuccess ? "toast success" : "toast";
+      setTimeout(() => { toastEl.style.display = "none"; }, 4000);
     }
 
     $("btn").onclick = async () => {
       const name = $("name").value.trim();
       const password = $("password").value;
+      
       if (!name || !password) return showToast("Заполните все поля");
+      if (password.length < 6) return showToast("Пароль должен быть минимум 6 символов");
 
       $("btn").disabled = true;
       $("btn").textContent = "Создание...";
 
       try {
-        const email = `${name.toLowerCase().replace(/[^a-zа-я0-9]/gi, '')}@family.local`;
+        // Firebase требует email, поэтому мы делаем его из имени
+        const safeName = name.toLowerCase().replace(/[^a-zа-я0-9]/gi, '');
+        const email = `${safeName}@family.local`;
         
-        await supabaseRequest("/auth/v1/admin/users", "POST", {
-          email: email,
-          password: password,
-          email_confirm: true,
-          user_metadata: { display_name: name.trim() }
-        });
+        // Создаем пользователя
+        const userCredential = await createUserWithEmailAndPassword(auth, email, password);
         
-        showToast("✅ Аккаунт создан");
+        // Сохраняем оригинальное имя (с русскими буквами и пробелами) в профиль
+        const { updateProfile } = await import("https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js");
+        await updateProfile(userCredential.user, { displayName: name });
+
+        showToast("✅ Аккаунт создан", true);
         $("name").value = "";
         $("password").value = "";
-        loadUsers();
       } catch (e) {
-        showToast("❌ " + e.message);
+        let errMsg = e.message;
+        if (e.code === 'auth/email-already-in-use') errMsg = "Это имя уже занято";
+        if (e.code === 'auth/invalid-email') errMsg = "Некорректное имя (используйте буквы и цифры)";
+        showToast("❌ " + errMsg);
       } finally {
         $("btn").disabled = false;
         $("btn").textContent = "Создать аккаунт";
       }
     };
-
-    loadUsers();
   </script>
 </body>
 </html>
