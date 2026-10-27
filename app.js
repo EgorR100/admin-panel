@@ -1,21 +1,20 @@
 import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
 import { 
-  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, 
-  updatePassword, updateProfile
+  getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { 
   getFirestore, doc, setDoc, getDoc, collection, query, where, 
-  updateDoc, deleteDoc, addDoc, arrayUnion, arrayRemove, getDocs, onSnapshot
+  updateDoc, deleteDoc, addDoc, arrayUnion, getDocs
 } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
 // ВСТАВЬ СЮДА СВОЙ firebaseConfig ИЗ FIREBASE:
 const firebaseConfig = {
-  apiKey: "AIzaSyBa_b7A-UYhNh8jFhefJWIV0m57nTkqrzk",
+  apiKey: "ТВОЙ_API_KEY",
   authDomain: "household-space.firebaseapp.com",
   projectId: "household-space",
-  storageBucket: "household-space.firebasestorage.app",
-  messagingSenderId: "471755254217",
-  appId: "1:471755254217:web:d1bda855b262144f992018"
+  storageBucket: "household-space.appspot.com",
+  messagingSenderId: "123456789",
+  appId: "1:123456789:web:abcdef"
 };
 
 const app = initializeApp(firebaseConfig);
@@ -41,6 +40,7 @@ function show(id) {
   $("bell-btn").style.display = ["scr-login"].includes(id) ? "none" : "block";
 }
 
+// Следим за состоянием входа
 onAuthStateChanged(auth, async (user) => {
   if (user) {
     me = { id: user.uid, name: user.displayName || user.email.split('@')[0] };
@@ -65,7 +65,10 @@ $("btn-login").onclick = async () => {
   }
 };
 
-$("btn-logout").onclick = async () => { await signOut(auth); };
+$("btn-logout").onclick = async () => { 
+  await signOut(auth); 
+  show("scr-login");
+};
 
 async function loadFamily() {
   const q = query(collection(db, "families"), where("members", "array-contains", me.id));
@@ -93,10 +96,13 @@ $("btn-join-family").onclick = async () => {
     const famRef = doc(db, "families", id);
     const famSnap = await getDoc(famRef);
     if (!famSnap.exists()) return toast("Семья не найдена");
-    await updateDoc(famRef, { members: arrayUnion(me.id) });
+    await updateDoc(famRef, { 
+      members: arrayUnion(me.id),
+      [`memberNames.${me.id}`]: me.name
+    });
     await loadFamily();
     enterHome();
-  } catch(e) { toast("Ошибка"); }
+  } catch(e) { toast("Ошибка при вступлении"); }
 };
 
 function enterHome() {
@@ -135,16 +141,23 @@ async function renderTables() {
   const box = $("tables-container"); box.innerHTML = "";
   const q = query(collection(db, "tables"), where("familyId", "==", familyId));
   const snap = await getDocs(q);
-  if (snap.empty) { box.innerHTML = '<div class="empty">Таблиц пока нет.</div>'; return; }
+  if (snap.empty) { box.innerHTML = '<div class="empty">Таблиц пока нет. Нажмите ＋, чтобы создать.</div>'; return; }
   
   snap.forEach(d => {
     const t = d.data();
     const el = document.createElement("div");
     el.className = "purchase-card";
-    el.innerHTML = `<div class="pc-head"><b>${esc(t.name)}</b></div><div class="row-gap"><button class="btn primary" data-open="${d.id}">Открыть</button></div>`;
+    el.innerHTML = `<div class="pc-head"><b>${esc(t.name)}</b></div><div class="row-gap"><button class="btn primary" data-open="${d.id}">Открыть</button><button class="btn danger" data-delete="${d.id}">Удалить</button></div>`;
     box.appendChild(el);
   });
+  
   box.querySelectorAll('[data-open]').forEach(b => b.onclick = () => openTable(b.dataset.open));
+  box.querySelectorAll('[data-delete]').forEach(b => b.onclick = async () => {
+    if(confirm('Удалить таблицу?')) {
+      await deleteDoc(doc(db, "tables", b.dataset.delete));
+      renderTables();
+    }
+  });
 }
 
 $("btn-new-table").onclick = () => {
@@ -153,6 +166,7 @@ $("btn-new-table").onclick = () => {
   $("modal-table").classList.remove('hidden');
 };
 $("btn-cancel-table").onclick = () => $("modal-table").classList.add('hidden');
+
 $("btn-confirm-table").onclick = async () => {
   const name = $("table-name").value.trim();
   if (!name) return toast('Введите название');
@@ -180,12 +194,15 @@ function renderGrid(t) {
   const table = document.createElement("table"); table.className = "data-table";
   const thead = document.createElement("thead"), hr = document.createElement("tr");
   const no = document.createElement("th"); no.textContent = "#"; hr.appendChild(no);
+  
   t.columns.forEach(c => { const th = document.createElement("th"); th.textContent = c.name; hr.appendChild(th); });
   thead.appendChild(hr); table.appendChild(thead);
+  
   const tbody = document.createElement("tbody");
   (t.rows || []).forEach((r, ri) => {
     const tr = document.createElement("tr");
     const num = document.createElement("td"); num.textContent = ri + 1; num.className = "row-number"; tr.appendChild(num);
+    
     t.columns.forEach(c => {
       const td = document.createElement("td"); td.textContent = r[c.id] || "";
       td.onclick = () => editCell(t.id, ri, c.id);
@@ -198,6 +215,61 @@ function renderGrid(t) {
 
 $("btn-back-tables").onclick = () => { show("scr-home"); renderTables(); };
 
+// Добавление строки
+$("btn-add-row").onclick = async () => {
+  if (!currentTableId) return;
+  const tSnap = await getDoc(doc(db, "tables", currentTableId));
+  const t = tSnap.data();
+  t.rows.push({});
+  await updateDoc(doc(db, "tables", currentTableId), { rows: t.rows });
+  renderGrid({ id: currentTableId, ...t });
+  toast('Строка добавлена');
+};
+
+// Сохранение таблицы
+$("btn-save-table").onclick = async () => {
+  toast('Все изменения уже сохранены в облаке!');
+  renderTables();
+};
+
+// Редактирование ячейки
+function editCell(tableId, rowIndex, colId) {
+  getDoc(doc(db, "tables", tableId)).then(snap => {
+    if (!snap.exists()) return;
+    const t = snap.data();
+    const c = t.columns.find(x => x.id === colId);
+    if (!c) return;
+    
+    cellContext = { tableId, rowIndex, colId };
+    $("cell-modal-title").textContent = c.name;
+    const host = $("cell-editor"); host.innerHTML = "";
+    
+    const input = document.createElement('input');
+    input.type = 'text';
+    input.value = t.rows[rowIndex][colId] || '';
+    input.id = "cell-value";
+    host.appendChild(input);
+    $("modal-cell").classList.remove('hidden');
+  });
+}
+
+$("btn-cancel-cell").onclick = () => $("modal-cell").classList.add('hidden');
+
+$("btn-save-cell").onclick = async () => {
+  if (!cellContext) return;
+  const { tableId, rowIndex, colId } = cellContext;
+  const tSnap = await getDoc(doc(db, "tables", tableId));
+  if (!tSnap.exists()) return;
+  
+  const t = tSnap.data();
+  t.rows[rowIndex][colId] = $("cell-value").value;
+  
+  await updateDoc(doc(db, "tables", tableId), { rows: t.rows });
+  $("modal-cell").classList.add('hidden');
+  renderGrid({ id: tableId, ...t });
+  toast('Сохранено');
+};
+
 async function updateBell() {
   if(!familyId) return;
   const q = query(collection(db, "notifications"), where("familyId", "==", familyId));
@@ -206,8 +278,3 @@ async function updateBell() {
   $("bell-badge").textContent = count;
   $("bell-badge").classList.toggle("hidden", count === 0);
 }
-
-// Заглушки для остальных кнопок, чтобы ничего не ломалось при клике:
-$("btn-add-row").onclick = () => toast("Функция в разработке");
-$("btn-manage-columns").onclick = () => toast("Функция в разработке");
-$("btn-save-table").onclick = () => toast("Сохранено");
