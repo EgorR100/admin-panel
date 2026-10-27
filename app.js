@@ -2,9 +2,6 @@ import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/fireba
 import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
 import { getFirestore, doc, setDoc, getDoc, collection, query, where, getDocs, updateDoc, deleteDoc, arrayUnion, addDoc } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
 
-// ============================================================
-// ВСТАВЬ СЮДА СВОЙ firebaseConfig ИЗ ПАНЕЛИ FIREBASE
-// ============================================================
 const firebaseConfig = {
   apiKey: "AIzaSyBa_b7A-UYhNh8jFhefJWIV0m57nTkqrzk",
   authDomain: "household-space.firebaseapp.com",
@@ -137,30 +134,45 @@ const isOwner = () => !!familyData && familyData.ownerId === me?.id;
 
 function renderFamilyTab() {
   if (!familyData) return;
+  
+  // Принудительно заполняем поля
   $("fam-name-label").textContent = familyData.name || "Семья";
   $("fam-id-label").textContent = familyId;
   
-  $("admin-zone").style.display = isOwner() ? "block" : "none";
-  $("rename-group-zone").style.display = isOwner() ? "block" : "none";
+  // Показываем зону переименования и участников
+  $("rename-group-zone").style.display = "block";
   $("group-name-input").value = familyData.name || "";
   
-  const box = $("members-container"); box.innerHTML = "";
-  (familyData.members || []).forEach(id => {
-    const name = familyData.memberNames?.[id] || "Без имени";
-    const isMe = id === me.id;
-    const role = id === familyData.ownerId ? "Владелец" : "Участник";
-    
-    const el = document.createElement("div");
-    el.className = "member";
-    el.innerHTML = `
-      <div class="info">
-        <b>${esc(name)} ${isMe ? '(Вы)' : ''}</b>
-        <div class="muted small">UID: <code>${id.slice(0,8)}...</code></div>
-      </div>
-      <div class="acts"><span class="role">${role}</span></div>
-    `;
-    box.appendChild(el);
-  });
+  // Блок с кнопкой удаления семьи (если ты владелец)
+  const adminZone = $("admin-zone");
+  if (adminZone) adminZone.style.display = isOwner() ? "block" : "none";
+
+  const box = $("members-container"); 
+  if (!box) return;
+  box.innerHTML = "";
+  
+  const members = familyData.members || [];
+  
+  if (members.length === 0) {
+    box.innerHTML = '<div class="empty">Участников нет.</div>';
+  } else {
+    members.forEach(id => {
+      const name = familyData.memberNames?.[id] || "Без имени";
+      const isMe = id === me.id;
+      const role = id === familyData.ownerId ? "Владелец" : "Участник";
+      
+      const el = document.createElement("div");
+      el.className = "member";
+      el.innerHTML = `
+        <div class="info">
+          <b>${esc(name)} ${isMe ? '(Вы)' : ''}</b>
+          <div class="muted small">UID: <code>${id.slice(0,8)}...</code></div>
+        </div>
+        <div class="acts"><span class="role">${role}</span></div>
+      `;
+      box.appendChild(el);
+    });
+  }
 }
 
 $("btn-rename-group").onclick = async () => {
@@ -191,7 +203,6 @@ async function renderTables() {
     const q = query(collection(db, "tables"), where("familyId", "==", familyId));
     const snap = await getDocs(q);
     
-    // ФИЛЬТРАЦИЯ: Оставляем общие таблицы + личные таблицы текущего пользователя
     const visibleTables = snap.docs.filter(d => {
       const t = d.data();
       return !t.isPrivate || t.ownerId === me.id;
@@ -207,7 +218,6 @@ async function renderTables() {
       const t = d.data();
       const el = document.createElement("div");
       el.className = "purchase-card";
-      
       const badge = t.isPrivate ? '<span class="role" style="background:#334155; padding:2px 8px; border-radius:10px; font-size:10px;">Личная</span>' : '';
       
       el.innerHTML = `
@@ -247,18 +257,13 @@ $("btn-cancel-table").onclick = () => $("modal-table").classList.add('hidden');
 $("btn-confirm-table").onclick = async () => {
   const name = $("table-name").value.trim();
   if (!name) return toast('Введите название');
-  
   const isPrivate = $("table-private").checked;
   const newRef = doc(collection(db, "tables"));
   
   await setDoc(newRef, {
-    familyId, 
-    name,
-    ownerId: me.id,
-    isPrivate: isPrivate,
+    familyId, name, ownerId: me.id, isPrivate: isPrivate,
     columns: [{ id: uid(), name: 'Задача', type: 'text', options: [] }],
-    rows: [{}], 
-    createdAt: Date.now()
+    rows: [{}], createdAt: Date.now()
   });
   
   $("modal-table").classList.add('hidden');
